@@ -26,12 +26,22 @@ fn run_check(cli: &Cli) -> Result<(), String> {
     let python = cli.python.clone();
     ensure_file(&helper, "helper")?;
 
-    let output = Command::new(&python)
+    let mut command = Command::new(&python);
+    command
         .arg(&helper)
         .arg("--check")
         .arg("--model")
         .arg(&cli.model)
-        .arg("--json")
+        .arg("--json");
+
+    if let Some(cache_dir) = cli.cache_dir_arg() {
+        command.arg("--cache-dir").arg(cache_dir);
+    }
+    if cli.download_model {
+        command.arg("--download-model");
+    }
+
+    let output = command
         .output()
         .map_err(|error| format!("failed to start python runtime: {error}"))?;
 
@@ -73,6 +83,9 @@ fn run_redact(cli: &Cli) -> Result<(), String> {
         .arg(labels_json)
         .arg("--json");
 
+    if let Some(cache_dir) = cli.cache_dir_arg() {
+        command.arg("--cache-dir").arg(cache_dir);
+    }
     if cli.allow_regex_fallback {
         command.arg("--allow-regex-fallback");
     }
@@ -97,10 +110,12 @@ struct Cli {
     helper: Option<PathBuf>,
     python: String,
     model: String,
+    cache_dir: Option<PathBuf>,
     threshold: f64,
     detector: String,
     labels: Vec<String>,
     allow_regex_fallback: bool,
+    download_model: bool,
 }
 
 impl Cli {
@@ -114,10 +129,12 @@ impl Cli {
             helper: None,
             python: env::var("VEILPDF_PYTHON").unwrap_or_else(|_| "python3".to_string()),
             model: DEFAULT_MODEL.to_string(),
+            cache_dir: env::var("VEILPDF_MODEL_CACHE").ok().map(PathBuf::from),
             threshold: 0.50,
             detector: "gliner".to_string(),
             labels: default_labels(),
             allow_regex_fallback: false,
+            download_model: false,
         };
 
         while let Some(arg) = iter.next() {
@@ -127,6 +144,7 @@ impl Cli {
                 "--helper" => cli.helper = Some(PathBuf::from(next_value(&mut iter, "--helper")?)),
                 "--python" => cli.python = next_value(&mut iter, "--python")?,
                 "--model" => cli.model = next_value(&mut iter, "--model")?,
+                "--cache-dir" => cli.cache_dir = Some(PathBuf::from(next_value(&mut iter, "--cache-dir")?)),
                 "--threshold" => {
                     let value = next_value(&mut iter, "--threshold")?;
                     cli.threshold = value
@@ -141,6 +159,7 @@ impl Cli {
                     cli.labels.push(next_value(&mut iter, "--label")?);
                 }
                 "--allow-regex-fallback" => cli.allow_regex_fallback = true,
+                "--download-model" => cli.download_model = true,
                 "--json" => {}
                 "--help" | "-h" => return Err(usage()),
                 unknown => return Err(format!("unknown argument: {unknown}\n{}", usage())),
@@ -168,6 +187,12 @@ impl Cli {
             return Ok(PathBuf::from(helper));
         }
         Ok(PathBuf::from("scripts/gliner_pii_redactor.py"))
+    }
+
+    fn cache_dir_arg(&self) -> Option<String> {
+        self.cache_dir
+            .as_ref()
+            .map(|path| path.display().to_string())
     }
 }
 
@@ -246,8 +271,8 @@ fn default_labels() -> Vec<String> {
 
 fn usage() -> String {
     "usage:
-  hide-pii-redactor check --helper <path> [--python <path>] [--model <id>] --json
-  hide-pii-redactor redact --input <pdf> --output <pdf> --helper <path> [--python <path>] [--model <id>] [--threshold 0.50] [--detector gliner|regex] [--label <label>] [--allow-regex-fallback] --json"
+  hide-pii-redactor check --helper <path> [--python <path>] [--model <id>] [--cache-dir <path>] [--download-model] --json
+  hide-pii-redactor redact --input <pdf> --output <pdf> --helper <path> [--python <path>] [--model <id>] [--cache-dir <path>] [--threshold 0.50] [--detector gliner|regex] [--label <label>] [--allow-regex-fallback] --json"
         .to_string()
 }
 
@@ -279,5 +304,18 @@ mod tests {
         .unwrap();
         assert_eq!(cli.detector, "regex");
         assert_eq!(cli.labels, vec!["email"]);
+    }
+
+    #[test]
+    fn parses_cache_dir_and_model_download() {
+        let cli = Cli::parse(vec![
+            "check".to_string(),
+            "--cache-dir".to_string(),
+            "/tmp/models".to_string(),
+            "--download-model".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(cli.cache_dir_arg(), Some("/tmp/models".to_string()));
+        assert!(cli.download_model);
     }
 }

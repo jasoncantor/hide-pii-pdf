@@ -27,6 +27,8 @@ struct RuntimeCheck: Decodable {
     let helper: String
     let pymupdfAvailable: Bool
     let glinerAvailable: Bool
+    let modelAvailable: Bool?
+    let modelCache: String?
     let defaultModel: String
     let errors: [String]
 
@@ -35,6 +37,8 @@ struct RuntimeCheck: Decodable {
         case helper
         case pymupdfAvailable = "pymupdf_available"
         case glinerAvailable = "gliner_available"
+        case modelAvailable = "model_available"
+        case modelCache = "model_cache"
         case defaultModel = "default_model"
         case errors
     }

@@ -13,6 +13,13 @@ struct VeilPDFApp: App {
                 .frame(minWidth: 980, minHeight: 620)
         }
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates...") {
+                    Task { await store.checkForUpdates(openIfAvailable: true) }
+                }
+                .disabled(store.isCheckingForUpdates)
+            }
+
             CommandGroup(after: .newItem) {
                 Button("Add PDFs...") {
                     store.presentImportPanel()

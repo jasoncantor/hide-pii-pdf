@@ -27,6 +27,24 @@ struct RustRedactorClient {
                 "--helper", paths.helper.path,
                 "--python", paths.python,
                 "--model", settings.modelIdentifier,
+                "--cache-dir", paths.modelCache.path,
+                "--json"
+            ]
+        )
+        return try decode(RuntimeCheck.self, from: output)
+    }
+
+    func downloadModel(settings: RedactionSettings) async throws -> RuntimeCheck {
+        let paths = ProjectPaths.resolve(settings: settings)
+        let output = try await runRedactor(
+            at: paths.redactor,
+            arguments: [
+                "check",
+                "--helper", paths.helper.path,
+                "--python", paths.python,
+                "--model", settings.modelIdentifier,
+                "--cache-dir", paths.modelCache.path,
+                "--download-model",
                 "--json"
             ]
         )
@@ -42,6 +60,7 @@ struct RustRedactorClient {
             "--helper", paths.helper.path,
             "--python", paths.python,
             "--model", settings.modelIdentifier,
+            "--cache-dir", paths.modelCache.path,
             "--threshold", String(format: "%.2f", settings.threshold),
             "--detector", settings.detectorMode.rawValue,
             "--json"
@@ -103,6 +122,7 @@ private struct ProjectPaths {
     let redactor: URL
     let helper: URL
     let python: String
+    let modelCache: URL
 
     static func resolve(settings: RedactionSettings) -> ProjectPaths {
         let environment = ProcessInfo.processInfo.environment
@@ -116,8 +136,10 @@ private struct ProjectPaths {
         let python = !settings.pythonPath.isEmpty
             ? settings.pythonPath
             : environment["VEILPDF_PYTHON"] ?? defaultPythonPath(root: root)
+        let modelCache = environment["VEILPDF_MODEL_CACHE"].map(URL.init(fileURLWithPath:))
+            ?? AppSupportPaths.modelCacheDirectory
 
-        return ProjectPaths(root: root, redactor: redactor, helper: helper, python: python)
+        return ProjectPaths(root: root, redactor: redactor, helper: helper, python: python, modelCache: modelCache)
     }
 
     private static func bundledRedactor() -> URL? {
@@ -146,8 +168,9 @@ private struct ProjectPaths {
     }
 
     private static func defaultPythonPath(root: URL) -> String {
+        let managedRuntime = AppSupportPaths.runtimePython.path
         let projectVenv = root.appendingPathComponent(".venv/bin/python").path
-        for candidate in [projectVenv, "/opt/homebrew/bin/python3", "/opt/homebrew/bin/python3.12", "/opt/homebrew/bin/python3.11", "/usr/bin/python3"] {
+        for candidate in [managedRuntime, projectVenv, "/opt/homebrew/bin/python3", "/opt/homebrew/bin/python3.12", "/opt/homebrew/bin/python3.11", "/usr/bin/python3"] {
             if FileManager.default.isExecutableFile(atPath: candidate) {
                 return candidate
             }

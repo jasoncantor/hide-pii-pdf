@@ -15,14 +15,27 @@ final class RedactionStore: ObservableObject {
     }
     @Published var runtimeCheck: RuntimeCheck?
     @Published var isCheckingRuntime = false
+    @Published var isInstallingRuntime = false
+    @Published var runtimeInstallMessage = ""
+    @Published var isCheckingForUpdates = false
+    @Published var updateInfo: UpdateInfo?
+    @Published var updateMessage = ""
     @Published var isRedacting = false
     @Published var bannerMessage = "Add PDFs to redact detected PII into black boxes."
 
     private static let settingsKey = "dev.local.VeilPDF.redactionSettings"
     private let client: RustRedactorClient
+    private let runtimeInstaller: RuntimeInstaller
+    private let updateService: UpdateService
 
-    init(client: RustRedactorClient = RustRedactorClient()) {
+    init(
+        client: RustRedactorClient = RustRedactorClient(),
+        runtimeInstaller: RuntimeInstaller = RuntimeInstaller(),
+        updateService: UpdateService = UpdateService()
+    ) {
         self.client = client
+        self.runtimeInstaller = runtimeInstaller
+        self.updateService = updateService
         self.settings = Self.loadSettings()
     }
 
@@ -104,6 +117,57 @@ final class RedactionStore: ObservableObject {
         }
     }
 
+    func installRuntime() async {
+        guard !isInstallingRuntime else { return }
+        isInstallingRuntime = true
+        runtimeInstallMessage = "Starting GLiNER runtime install"
+        defer { isInstallingRuntime = false }
+
+        do {
+            let result = try await runtimeInstaller.install(settings: settings) { [weak self] message in
+                self?.runtimeInstallMessage = message
+                self?.bannerMessage = message
+            }
+            settings.pythonPath = result.pythonPath
+            runtimeCheck = result.runtimeCheck
+            runtimeInstallMessage = "GLiNER runtime and model are ready."
+            bannerMessage = runtimeInstallMessage
+        } catch {
+            runtimeInstallMessage = error.localizedDescription
+            bannerMessage = error.localizedDescription
+        }
+    }
+
+    func checkForUpdates(openIfAvailable: Bool = false) async {
+        guard !isCheckingForUpdates else { return }
+        isCheckingForUpdates = true
+        updateMessage = "Checking for updates"
+        defer { isCheckingForUpdates = false }
+
+        do {
+            let info = try await updateService.checkForUpdates(currentVersion: currentVersion)
+            updateInfo = info
+            if info.isUpdateAvailable {
+                updateMessage = "VeilPDF \(info.latestVersion) is available."
+                bannerMessage = updateMessage
+                if openIfAvailable {
+                    openUpdate(info)
+                }
+            } else {
+                updateMessage = "VeilPDF is up to date."
+                bannerMessage = updateMessage
+            }
+        } catch {
+            updateMessage = error.localizedDescription
+            bannerMessage = error.localizedDescription
+        }
+    }
+
+    func openAvailableUpdate() {
+        guard let updateInfo else { return }
+        openUpdate(updateInfo)
+    }
+
     func redactPending() async {
         guard canRedact else { return }
         isRedacting = true
@@ -148,6 +212,14 @@ final class RedactionStore: ObservableObject {
         let folder = settings.outputFolder ?? inputURL.deletingLastPathComponent()
         let base = inputURL.deletingPathExtension().lastPathComponent
         return folder.appendingPathComponent("\(base)-redacted.pdf")
+    }
+
+    private var currentVersion: String {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
+    }
+
+    private func openUpdate(_ info: UpdateInfo) {
+        NSWorkspace.shared.open(info.assetURL ?? info.releaseURL)
     }
 
     private static func loadSettings() -> RedactionSettings {

@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 import time
@@ -73,18 +74,22 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input")
     parser.add_argument("--output")
     parser.add_argument("--model", default=DEFAULT_MODEL)
+    parser.add_argument("--cache-dir", default="")
     parser.add_argument("--threshold", type=float, default=0.50)
     parser.add_argument("--detector", choices=["gliner", "regex"], default="gliner")
     parser.add_argument("--labels-json", default="")
     parser.add_argument("--allow-regex-fallback", action="store_true")
+    parser.add_argument("--download-model", action="store_true")
     parser.add_argument("--json", action="store_true")
     return parser
 
 
 def check_environment(args: argparse.Namespace) -> dict[str, Any]:
+    configure_model_cache(args.cache_dir)
     errors: list[str] = []
     pymupdf_available = True
     gliner_available = True
+    model_available = None
 
     try:
         import fitz  # noqa: F401
@@ -98,11 +103,20 @@ def check_environment(args: argparse.Namespace) -> dict[str, Any]:
         gliner_available = False
         errors.append(f"GLiNER unavailable: {exc}")
 
+    if gliner_available and args.download_model:
+        try:
+            load_gliner_model(args.model)
+            model_available = True
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"GLiNER model unavailable: {exc}")
+
     return {
         "python": sys.executable,
         "helper": str(Path(__file__).resolve()),
         "pymupdf_available": pymupdf_available,
         "gliner_available": gliner_available,
+        "model_available": model_available,
+        "model_cache": configured_model_cache(args.cache_dir),
         "default_model": args.model,
         "errors": errors,
     }
@@ -120,6 +134,7 @@ def redact_pdf(args: argparse.Namespace) -> dict[str, Any]:
     start = time.monotonic()
     input_path = Path(args.input)
     output_path = Path(args.output)
+    configure_model_cache(args.cache_dir)
     labels = parse_labels(args.labels_json)
     warnings: list[str] = []
     detector_used = args.detector
@@ -177,6 +192,22 @@ def load_gliner_model(model_id: str) -> Any:
     from gliner import GLiNER
 
     return GLiNER.from_pretrained(model_id)
+
+
+def configure_model_cache(cache_dir: str) -> None:
+    if not cache_dir:
+        return
+    cache_path = Path(cache_dir).expanduser()
+    cache_path.mkdir(parents=True, exist_ok=True)
+    os.environ.setdefault("HF_HOME", str(cache_path))
+    os.environ.setdefault("HF_HUB_CACHE", str(cache_path / "hub"))
+    os.environ.setdefault("TRANSFORMERS_CACHE", str(cache_path / "transformers"))
+
+
+def configured_model_cache(cache_dir: str) -> str:
+    if cache_dir:
+        return str(Path(cache_dir).expanduser())
+    return ""
 
 
 def detect_with_gliner(model: Any, text: str, labels: list[str], threshold: float) -> list[Entity]:

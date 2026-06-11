@@ -79,26 +79,81 @@ struct SettingsView: View {
             }
 
             Section("Runtime") {
-                HStack {
-                    Button {
-                        Task { await store.checkRuntime() }
-                    } label: {
-                        if store.isCheckingRuntime {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label("Check Runtime", systemImage: "stethoscope")
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack {
+                        Button {
+                            Task { await store.installRuntime() }
+                        } label: {
+                            if store.isInstallingRuntime {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label("Install GLiNER Runtime", systemImage: "square.and.arrow.down")
+                            }
                         }
+                        .disabled(store.isInstallingRuntime)
+
+                        Button {
+                            Task { await store.checkRuntime() }
+                        } label: {
+                            if store.isCheckingRuntime {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label("Check Runtime", systemImage: "stethoscope")
+                            }
+                        }
+                        .disabled(store.isCheckingRuntime || store.isInstallingRuntime)
+                    }
+
+                    if !store.runtimeInstallMessage.isEmpty {
+                        Text(store.runtimeInstallMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     if let check = store.runtimeCheck {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(check.glinerAvailable ? "GLiNER available" : "GLiNER missing")
-                                .foregroundStyle(check.glinerAvailable ? .green : .orange)
-                            Text(check.python)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                        Grid(alignment: .leading, horizontalSpacing: 12, verticalSpacing: 4) {
+                            runtimeRow("Python", check.python)
+                            runtimeRow("PyMuPDF", check.pymupdfAvailable ? "Available" : "Missing")
+                            runtimeRow("GLiNER", check.glinerAvailable ? "Available" : "Missing")
+                            if let modelAvailable = check.modelAvailable {
+                                runtimeRow("Model", modelAvailable ? "Ready" : "Not downloaded")
+                            }
+                            if let modelCache = check.modelCache, !modelCache.isEmpty {
+                                runtimeRow("Cache", modelCache)
+                            }
                         }
+                    }
+                }
+            }
+
+            Section("Updates") {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Button {
+                            Task { await store.checkForUpdates() }
+                        } label: {
+                            if store.isCheckingForUpdates {
+                                ProgressView()
+                                    .controlSize(.small)
+                            } else {
+                                Label("Check for Updates", systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        .disabled(store.isCheckingForUpdates)
+
+                        if store.updateInfo?.isUpdateAvailable == true {
+                            Button("Download Update") {
+                                store.openAvailableUpdate()
+                            }
+                        }
+                    }
+
+                    if !store.updateMessage.isEmpty {
+                        Text(store.updateMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
                 }
             }
@@ -106,6 +161,17 @@ struct SettingsView: View {
         .formStyle(.grouped)
         .padding()
         .frame(width: 620)
+    }
+
+    @ViewBuilder
+    private func runtimeRow(_ title: String, _ value: String) -> some View {
+        GridRow {
+            Text(title)
+                .foregroundStyle(.secondary)
+            Text(value)
+                .textSelection(.enabled)
+                .lineLimit(1)
+        }
     }
 
     private func labelBinding(_ label: String) -> Binding<Bool> {

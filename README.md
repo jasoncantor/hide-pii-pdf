@@ -12,7 +12,9 @@ Download the latest signed and notarized DMG from [GitHub Releases](https://gith
 
 1. Open the downloaded `VeilPDF-vX.Y.Z.dmg`.
 2. Drag `VeilPDF.app` to Applications.
-3. Open VeilPDF and add a PDF with the `+` button or by dragging it into the sidebar.
+3. Open VeilPDF.
+4. In Settings, click `Install GLiNER Runtime` to install the local redaction runtime and model.
+5. Add a PDF with the `+` button or by dragging it into the sidebar.
 
 If macOS blocks an older build, remove that copy and install the latest release from the link above.
 
@@ -22,6 +24,8 @@ If macOS blocks an older build, remove that copy and install the latest release 
 - Applies real PDF redactions with black filled redaction boxes.
 - Lets you choose which PII categories should be redacted.
 - Keeps processing local to your Mac.
+- Installs the GLiNER runtime and model into your user Application Support folder.
+- Checks GitHub Releases for app updates from inside VeilPDF.
 - Supports drag-and-drop PDF intake and batch-style job tracking.
 - Includes a regex test mode for quick local checks.
 
@@ -35,15 +39,15 @@ If macOS blocks an older build, remove that copy and install the latest release 
 
 Redacted files are saved next to the original PDF with `-redacted` appended to the filename.
 
-## GLiNER Runtime
+## Runtime
 
-VeilPDF currently uses a local Python environment for GLiNER-PII detection. Install Python 3.11 or newer with these packages available:
+VeilPDF uses a local Python environment for GLiNER-PII detection. From Settings, click `Install GLiNER Runtime` to create a VeilPDF-managed environment under `~/Library/Application Support/VeilPDF`, install `PyMuPDF` and `gliner`, and download the GLiNER-PII model.
 
-```bash
-pip install PyMuPDF gliner
-```
+If you prefer to manage Python yourself, open Settings and point the Python field at an interpreter that already has `PyMuPDF` and `gliner` installed.
 
-If VeilPDF does not find that runtime automatically, open Settings and point the Python field at the interpreter you want to use.
+## Updates
+
+Use `VeilPDF > Check for Updates...` or the Updates section in Settings to check the latest GitHub release.
 
 ## Build From Source
 
